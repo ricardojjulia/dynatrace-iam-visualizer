@@ -2,6 +2,13 @@ import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import { DynatraceClient } from './dynatrace';
+import {
+  createPolicyRoutes,
+  createGroupRoutes,
+  createUserRoutes,
+  createBindingRoutes,
+  createPermissionsRoutes,
+} from './routes';
 
 dotenv.config();
 
@@ -26,102 +33,63 @@ app.use(express.json());
 // Error handling middleware
 app.use((err: any, req: Request, res: Response, next: NextFunction) => {
   console.error('Error:', err);
-  res.status(500).json({ error: 'Internal server error', message: err.message });
+  const statusCode = err.response?.status || err.status || 500;
+  const message = err.response?.data?.message || err.message || 'Internal server error';
+  res.status(statusCode).json({
+    error: message,
+    timestamp: new Date().toISOString(),
+  });
 });
 
-// Routes
+// Health check
 app.get('/api/health', (req: Request, res: Response) => {
   const status = {
     status: 'Server is running',
+    timestamp: new Date().toISOString(),
     dynatraceConfigured: !!dynatraceClient,
+    apiVersion: '1.0.0',
   };
   res.json(status);
 });
 
-app.get('/api/policies', async (req: Request, res: Response, next: NextFunction) => {
-  try {
-    if (!dynatraceClient) {
-      return res.status(503).json({ error: 'Dynatrace client not configured' });
-    }
+// API Routes
+app.use('/api/policies', createPolicyRoutes(dynatraceClient));
+app.use('/api/groups', createGroupRoutes(dynatraceClient));
+app.use('/api/users', createUserRoutes(dynatraceClient));
+app.use('/api/bindings', createBindingRoutes(dynatraceClient));
+app.use('/api/permissions', createPermissionsRoutes(dynatraceClient));
 
-    const policies = await dynatraceClient.getPolicies();
-    res.json({ policies });
-  } catch (error) {
-    next(error);
-  }
-});
-
-app.get('/api/policies/:id', async (req: Request, res: Response, next: NextFunction) => {
-  try {
-    if (!dynatraceClient) {
-      return res.status(503).json({ error: 'Dynatrace client not configured' });
-    }
-
-    const policy = await dynatraceClient.getPolicy(req.params.id);
-    res.json(policy);
-  } catch (error) {
-    next(error);
-  }
-});
-
-app.post('/api/policies', async (req: Request, res: Response, next: NextFunction) => {
-  try {
-    if (!dynatraceClient) {
-      return res.status(503).json({ error: 'Dynatrace client not configured' });
-    }
-
-    const policy = await dynatraceClient.createPolicy(req.body);
-    res.status(201).json(policy);
-  } catch (error) {
-    next(error);
-  }
-});
-
-app.put('/api/policies/:id', async (req: Request, res: Response, next: NextFunction) => {
-  try {
-    if (!dynatraceClient) {
-      return res.status(503).json({ error: 'Dynatrace client not configured' });
-    }
-
-    const policy = await dynatraceClient.updatePolicy(req.params.id, req.body);
-    res.json(policy);
-  } catch (error) {
-    next(error);
-  }
-});
-
-app.delete('/api/policies/:id', async (req: Request, res: Response, next: NextFunction) => {
-  try {
-    if (!dynatraceClient) {
-      return res.status(503).json({ error: 'Dynatrace client not configured' });
-    }
-
-    await dynatraceClient.deletePolicy(req.params.id);
-    res.status(204).send();
-  } catch (error) {
-    next(error);
-  }
-});
-
-app.post('/api/policies/validate', async (req: Request, res: Response, next: NextFunction) => {
-  try {
-    if (!dynatraceClient) {
-      return res.status(503).json({ error: 'Dynatrace client not configured' });
-    }
-
-    const result = await dynatraceClient.validatePolicy(req.body);
-    res.json(result);
-  } catch (error) {
-    next(error);
-  }
+// 404 handler
+app.use((req: Request, res: Response) => {
+  res.status(404).json({ error: 'Not found', path: req.path });
 });
 
 // Start server
 app.listen(PORT, () => {
-  console.log(`Server is running on port ${PORT}`);
+  console.log(`\n🚀 Server is running on http://localhost:${PORT}`);
+  console.log(`📊 API Documentation available at http://localhost:${PORT}/api/health\n`);
+
   if (!dynatraceClient) {
-    console.warn('⚠️  Warning: Dynatrace credentials not configured. Set environment variables to enable API integration.');
+    console.warn('⚠️  WARNING: Dynatrace credentials not configured.');
+    console.warn('   Set environment variables to enable API integration:');
+    console.warn('   - DYNATRACE_ENVIRONMENT_ID');
+    console.warn('   - DYNATRACE_API_TOKEN');
+    console.warn('   - DYNATRACE_API_URL\n');
   } else {
-    console.log('✅ Dynatrace client configured and ready');
+    console.log('✅ Dynatrace client configured and ready\n');
   }
+
+  console.log('Available endpoints:');
+  console.log('  GET  /api/health                        - Server health check');
+  console.log('  GET  /api/policies                      - List policies');
+  console.log('  POST /api/policies                      - Create policy');
+  console.log('  GET  /api/policies/:uuid                - Get policy');
+  console.log('  PUT  /api/policies/:uuid                - Update policy');
+  console.log('  DELETE /api/policies/:uuid              - Delete policy');
+  console.log('  GET  /api/groups                        - List groups');
+  console.log('  POST /api/groups                        - Create groups');
+  console.log('  GET  /api/users                         - List users');
+  console.log('  POST /api/users                         - Create user');
+  console.log('  GET  /api/bindings                      - List bindings');
+  console.log('  GET  /api/permissions/effective         - Get effective permissions\n');
 });
