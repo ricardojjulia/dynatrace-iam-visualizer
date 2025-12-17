@@ -34,7 +34,7 @@ export class DynatraceClient {
     this.client = axios.create({
       baseURL: apiUrl,
       headers: {
-        Authorization: `Api-Token ${apiToken}`,
+        Authorization: `Bearer ${apiToken}`,
         'Content-Type': 'application/json',
       },
       timeout: 30000,
