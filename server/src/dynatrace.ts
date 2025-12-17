@@ -41,6 +41,20 @@ export class DynatraceClient {
     });
   }
 
+  // ==================== ACCOUNT MANAGEMENT ====================
+
+  /**
+   * Get the current account UUID
+   */
+  getAccounts(): Promise<Array<{ uuid: string; id: string }>> {
+    return Promise.resolve([
+      {
+        uuid: this.accountUuid,
+        id: this.accountUuid,
+      },
+    ]);
+  }
+
   // ==================== USER MANAGEMENT ====================
 
   /**

@@ -16,13 +16,36 @@ export function createPolicyRoutes(dynatraceClient: DynatraceClient | null) {
 
   /**
    * List all policies for a level
-   * GET /api/policies?levelType=account&levelId=<uuid>
+   * GET /api/policies or /api/policies?levelType=account&levelId=<uuid>
    */
   router.get('/', checkClient, async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { levelType = 'account', levelId } = req.query;
 
+      // If no levelId provided, try to get account from Dynatrace
       if (!levelId) {
+        try {
+          // Get account info to use as default levelId
+          const accounts = await dynatraceClient!.getAccounts?.();
+          if (accounts && accounts.length > 0) {
+            const accountId = accounts[0].uuid || accounts[0].id;
+            const policies = await dynatraceClient!.getPolicies(
+              'account',
+              accountId
+            );
+            return res.json(policies);
+          }
+        } catch (e) {
+          // Fall back to using environment ID if available
+          const envId = process.env.DYNATRACE_ENVIRONMENT_ID;
+          if (envId) {
+            const policies = await dynatraceClient!.getPolicies(
+              'account',
+              envId
+            );
+            return res.json(policies);
+          }
+        }
         return res.status(400).json({ error: 'levelId query parameter is required' });
       }
 

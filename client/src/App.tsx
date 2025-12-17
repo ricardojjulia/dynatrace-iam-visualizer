@@ -25,11 +25,16 @@ const App: React.FC = () => {
       const response = await fetch(`${apiUrl}/api/policies`);
       
       if (!response.ok) {
-        throw new Error(`API error: ${response.status}`);
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(
+          errorData.error || `API error: ${response.status} ${response.statusText}`
+        );
       }
       
       const data = await response.json();
-      setPolicies(data.policies || []);
+      // Handle both array and object with policies property
+      const policiesList = Array.isArray(data) ? data : (data.policies || data.content || []);
+      setPolicies(policiesList);
       setError(null);
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Unknown error occurred';
