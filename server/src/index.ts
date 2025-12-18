@@ -9,11 +9,12 @@ import {
   createBindingRoutes,
   createPermissionsRoutes,
 } from './routes';
+import { fetchDynatraceSpec } from './spec';
 
 dotenv.config();
 
 const app = express();
-const PORT = process.env.PORT || 5000;
+const PORT = process.env.PORT || 5002;
 
 // Initialize Dynatrace client
 let dynatraceClient: DynatraceClient | null = null;
@@ -52,6 +53,19 @@ app.get('/api/health', (req: Request, res: Response) => {
   res.json(status);
 });
 
+// Dynatrace OpenAPI spec proxy
+app.get('/api/spec', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const spec = await fetchDynatraceSpec({
+      forceRefresh: req.query.refresh === 'true',
+      specUrl: (req.query.url as string) || undefined,
+    });
+    res.json(spec);
+  } catch (error) {
+    next(error);
+  }
+});
+
 // API Routes
 app.use('/api/policies', createPolicyRoutes(dynatraceClient));
 app.use('/api/groups', createGroupRoutes(dynatraceClient));
@@ -81,6 +95,7 @@ app.listen(PORT, () => {
 
   console.log('Available endpoints:');
   console.log('  GET  /api/health                        - Server health check');
+  console.log('  GET  /api/spec                          - Dynatrace OpenAPI spec proxy');
   console.log('  GET  /api/policies                      - List policies');
   console.log('  POST /api/policies                      - Create policy');
   console.log('  GET  /api/policies/:uuid                - Get policy');
