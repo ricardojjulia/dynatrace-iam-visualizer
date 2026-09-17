@@ -8,7 +8,7 @@
     "build": "tsc",
     "start": "node dist/index.js",
     "type-check": "tsc --noEmit",
-    "generate-types": "openapi-typescript DT-Account-MGMT-API.json -o src/generated-types.ts",
+    "generate-types": "openapi-typescript ../DT-Account-MGMT-API.json -o src/generated-types.ts",
     "lint": "eslint src/**/*.ts"
   },
   "dependencies": {

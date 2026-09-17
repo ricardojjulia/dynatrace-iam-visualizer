@@ -1,109 +1,166 @@
-# Dynatrace IAM Policy Visualizer
+# Dynatrace IAM Visualizer
 
-A web-based application that connects to Dynatrace tenants to visualize and evaluate IAM policies through API calls.
+Dynatrace IAM Visualizer is a TypeScript monorepo with:
 
-## Features
+- a React client (`/client`) that displays IAM policies
+- an Express server (`/server`) that proxies Dynatrace Account Management APIs
 
-- Connect to Dynatrace tenant via API
-- Visualize IAM policies in an interactive dashboard
-- Evaluate and analyze policy configurations
-- Real-time policy data retrieval and display
+The app is intended to help inspect IAM policy data and related account IAM objects without exposing API tokens to the browser.
 
-## Tech Stack
+## Architecture
 
-- **Frontend**: React + TypeScript
-- **Backend**: Node.js + Express + TypeScript
-- **Package Manager**: npm (with workspaces)
+- **Client**: React 18 + TypeScript (`react-scripts`)
+- **Server**: Express + TypeScript
+- **Data source**: Dynatrace Account Management APIs (`/iam/v1/...`) and environment listing endpoint (`/env/v2/...`)
+- **Repository layout**:
 
-## Project Structure
-
-```
+```text
 dynatrace-iam-visualizer/
-├── client/                 # React frontend application
-│   ├── src/
-│   ├── public/
-│   └── package.json
-├── server/                 # Express backend application
-│   ├── src/
-│   └── package.json
-├── package.json           # Root workspace configuration
-└── README.md
+├── client/                 # UI
+├── server/                 # API proxy/backend
+├── DT-Account-MGMT-API.json # Local OpenAPI snapshot used for type generation
+└── package.json            # npm workspaces + orchestration scripts
 ```
 
-## Getting Started
+## IAM policy visualization workflow
+
+1. The UI calls `GET /api/policies` on the local server.
+2. The server uses configured Dynatrace account credentials (`DYNATRACE_*`) to call Dynatrace IAM endpoints.
+3. The response is returned to the UI and rendered as a policy list + policy details pane.
+4. Additional backend routes expose groups, users, bindings, and effective permissions for IAM analysis workflows.
+
+## API integration
+
+The backend exposes routes under `/api` (see `/server/src/routes.ts` and `/server/API.md`), including:
+
+- `GET /api/health`
+- `GET /api/spec` (Dynatrace OpenAPI spec proxy/cache)
+- `GET/POST/PUT/DELETE /api/policies`
+- `GET/POST/PUT/DELETE /api/groups` and group-user mapping routes
+- `GET/POST/PUT/DELETE /api/users` and membership routes
+- `GET/PUT /api/bindings`
+- `GET /api/permissions/effective`
+
+## Required Dynatrace permissions
+
+The exact scopes depend on which endpoints you use. For policy visualization and broader IAM operations implemented by this server, API specs in `DT-Account-MGMT-API.json` reference scopes such as:
+
+- `iam:policies:read`, `iam:policies:write`, `iam-policies-management`
+- `iam:bindings:read`, `iam:bindings:write`
+- `iam:effective-permissions:read`
+- `iam:limits:read`, `sso-idm:account-limits:read`
+- `account-idm-read`, `account-idm-write`
+
+Use least privilege and grant only scopes needed for the routes you plan to call.
+
+## Security and token handling
+
+- Keep Dynatrace credentials in **server-side environment variables only**.
+- Do **not** place `DYNATRACE_API_TOKEN` in client `.env` files.
+- `.env` files are ignored by git (`.gitignore`) and should never be committed.
+- The browser should only call the local backend (`REACT_APP_API_URL`), not Dynatrace APIs directly.
+
+## Environment variables
+
+### Server (`/server/.env`)
+
+Use `/server/.env.example` as a template:
+
+```env
+DYNATRACE_ENVIRONMENT_ID=<account-uuid>
+DYNATRACE_API_TOKEN=<dynatrace-token>
+DYNATRACE_API_URL=https://api.dynatrace.com
+DYNATRACE_SPEC_URL=https://api.dynatrace.com/spec-json
+PORT=5002
+NODE_ENV=development
+```
+
+### Client (`/client/.env.local`)
+
+Use `/client/.env.example` as a template:
+
+```env
+REACT_APP_API_URL=http://localhost:5002
+```
+
+## Local development
 
 ### Prerequisites
 
-- Node.js 18+ and npm 9+
-- Dynatrace tenant access with API credentials
+- Node.js 18+
+- npm 9+
 
-### Installation
+### Setup
 
-1. Clone the repository:
 ```bash
-git clone https://github.com/yourusername/dynatrace-iam-visualizer.git
+git clone https://github.com/ricardojjulia/dynatrace-iam-visualizer.git
 cd dynatrace-iam-visualizer
-```
-
-2. Install dependencies for all workspaces:
-```bash
 npm run install-all
 ```
 
-### Configuration
+### Run both apps
 
-1. Create environment files:
-
-**Server (`server/.env`)**:
-```
-DYNATRACE_ENVIRONMENT_ID=your_environment_id
-DYNATRACE_API_TOKEN=your_api_token
-PORT=5000
-```
-
-**Client (`client/.env.local`)**:
-```
-REACT_APP_API_URL=http://localhost:5000
-```
-
-### Development
-
-Start both frontend and backend in development mode:
 ```bash
 npm run dev
 ```
 
-This will start:
-- Frontend: http://localhost:3000
-- Backend: http://localhost:5000
+Default URLs:
 
-### Building for Production
+- Client: `http://localhost:3000`
+- Server: `http://localhost:5002`
+
+## Production build and run
 
 ```bash
 npm run build
-```
-
-### Running Production Build
-
-```bash
 npm start
 ```
 
-## API Integration
+`npm start` launches the compiled server from `/server/dist`.
 
-The application uses the Dynatrace API to retrieve IAM policy information. Ensure your API token has the necessary permissions to read policy data.
+## API type generation
 
-## Contributing
+A local OpenAPI snapshot is available at `/DT-Account-MGMT-API.json`.
 
-1. Create a feature branch (`git checkout -b feature/amazing-feature`)
-2. Commit your changes (`git commit -m 'Add amazing feature'`)
-3. Push to the branch (`git push origin feature/amazing-feature`)
-4. Open a Pull Request
+Generate TypeScript types in the server workspace:
 
-## License
+```bash
+npm run generate-types --workspace=server
+```
 
-This project is licensed under the MIT License - see the LICENSE file for details.
+Or use the helper script:
 
-## Support
+```bash
+cd server
+./generate-types.sh
+```
 
-For issues and questions, please open an issue on GitHub.
+## Troubleshooting
+
+- **`Dynatrace client not configured` (503):** verify server `.env` values and restart the server.
+- **Client cannot reach API:** ensure `REACT_APP_API_URL` points to the running server port.
+- **Auth/permission failures from Dynatrace:** validate token scopes for the specific route.
+- **`/api/spec` fetch issues:** check outbound network access and `DYNATRACE_SPEC_URL`.
+
+## Testing and linting
+
+Run available checks from repo root:
+
+```bash
+npm run build
+npm run lint --workspace=server
+CI=true npm run test --workspace=client -- --watch=false --passWithNoTests
+```
+
+## Contribution workflow
+
+1. Create a feature/fix branch.
+2. Keep changes focused and small.
+3. Run build/lint/tests relevant to your changes.
+4. Open a pull request with a clear description and validation notes.
+
+## License status
+
+No `LICENSE` file is currently present in this repository.
+
+Because no explicit license decision is documented in-repo, this README does **not** assume or invent a legal license. Repository owners should add an explicit license file if they want to grant reuse rights.
